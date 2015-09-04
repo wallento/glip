@@ -87,12 +87,10 @@ module kc705_loopback
 
    assign debug = { loop_ready, loop_data[5:0], loop_valid };   
 
-   assign loop_ready = 1'b1;
-   
    glip_cypressfx3_toplevel
       u_glib_cypressfx3(// Logic->Host
-			.fifo_out_ready (),
-                        .fifo_out_valid (loop_ready),
+			.fifo_out_ready (loop_ready),
+                        .fifo_out_valid (loop_valid),
                         .fifo_out_data  (loop_data),
 			// Host->Logic
                         .fifo_in_valid  (loop_valid),

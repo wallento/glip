@@ -25,11 +25,19 @@
  * Author(s):
  *   Stefan Wallentowitz <stefan.wallentowitz@tum.de>
  */
+
+// TODO:
+//  - rst & board not connected
+//  - downscale when WIDTH == 32
+//  - make Xilinx FIFO selectable
 module kc705_loopback
+  #(
+    parameter WIDTH = 16
+    )
   (
    // FX3 interface
    output 	fx3_pclk,
-   inout [15:0] fx3_dq,
+   inout [WIDTH-1:0] fx3_dq,
    output 	fx3_slcs_n,
    output 	fx3_sloe_n,
    output 	fx3_slrd_n,
@@ -68,60 +76,59 @@ module kc705_loopback
 
    wire 	clk;
 
-   localparam FREQ = 32'd10000000;
-//   localparam FREQ = 32'd100000000;
+   localparam FREQ = 32'd100000000;
    
    kc705_loopback_clock
      #(.FREQ(FREQ))
    u_clock (.clk_in_p (clk_p),
 	    .clk_in_n (clk_n),
 	    .clk_out  (clk),
-	    .locked   (led0),
+	    .locked   (),
 	    .rst      (1'b0));  
    
    assign fx3_pclk = clk;
    
-   wire [15:0]  loop_data;
-   wire         loop_valid;
-   wire         loop_ready;
+   wire [WIDTH-1:0]  loop_data;
+   wire 	     loop_valid;
+   wire 	     loop_ready;
 
-   assign debug = { loop_ready, loop_data[5:0], loop_valid };   
+//   assign debug = { loop_ready, loop_data[5:0], loop_valid };   
 
    glip_cypressfx3_toplevel
-      u_glib_cypressfx3(// Logic->Host
-			.fifo_out_ready (loop_ready),
-                        .fifo_out_valid (loop_valid),
-                        .fifo_out_data  (loop_data),
-			// Host->Logic
-                        .fifo_in_valid  (loop_valid),
-                        .fifo_in_data   (loop_data),
-                        .fifo_in_ready  (loop_ready),
-
-                        .rst            (fx3_com_rst),
-                        .com_rst        (),
-                        .ctrl_logic_rst (),
-			.debug_in ({dip2, dip1, dip0}),
-			.debug_out ({led6, led5, led4, led3, led2}),
-
-                        /*AUTOINST*/
-			// Outputs
-			.fx3_slcs_n	(fx3_slcs_n),
-			.fx3_sloe_n	(fx3_sloe_n),
-			.fx3_slrd_n	(fx3_slrd_n),
-			.fx3_slwr_n	(fx3_slwr_n),
-			.fx3_pktend_n	(fx3_pktend_n),
-			.fx3_a		(fx3_a[1:0]),
-			// Inouts
-			.fx3_dq		(fx3_dq[15:0]),
-			// Inputs
-			.fx3_pclk	(clk),
-			.fx3_flaga	(fx3_flaga),
-			.fx3_flagb	(fx3_flagb),
-			.fx3_flagc	(fx3_flagc),
-			.fx3_flagd	(fx3_flagd),
-			.fx3_com_rst	(fx3_com_rst),
-			.fx3_logic_rst	(fx3_logic_rst),
-			.clk		(clk));
+     #(.WIDTH(WIDTH))
+   u_glib_cypressfx3(// Logic->Host
+		     .fifo_out_ready (loop_ready),
+                     .fifo_out_valid (loop_valid),
+                     .fifo_out_data  (loop_data),
+		     // Host->Logic
+                     .fifo_in_valid  (loop_valid),
+                     .fifo_in_data   (loop_data),
+                     .fifo_in_ready  (loop_ready),
+		     
+                     .rst            (fx3_com_rst),
+                     .com_rst        (),
+                     .ctrl_logic_rst (),
+		     .debug_in ({dip2, dip1, dip0}),
+		     .debug_out (debug),
+		     
+		     // Outputs
+		     .fx3_slcs_n	(fx3_slcs_n),
+		     .fx3_sloe_n	(fx3_sloe_n),
+		     .fx3_slrd_n	(fx3_slrd_n),
+		     .fx3_slwr_n	(fx3_slwr_n),
+		     .fx3_pktend_n	(fx3_pktend_n),
+		     .fx3_a		(fx3_a[1:0]),
+		     // Inouts
+		     .fx3_dq		(fx3_dq[WIDTH-1:0]),
+		     // Inputs
+		     .fx3_pclk	(clk),
+		     .fx3_flaga	(fx3_flaga),
+		     .fx3_flagb	(fx3_flagb),
+		     .fx3_flagc	(fx3_flagc),
+		     .fx3_flagd	(fx3_flagd),
+		     .fx3_com_rst	(fx3_com_rst),
+		     .fx3_logic_rst	(fx3_logic_rst),
+		     .clk		(clk));
 
    reg [7:0] 		display_data;
    reg 			display_en;
@@ -143,22 +150,12 @@ module kc705_loopback
 	   .in_pos	(display_col),
 	   .in_row	(display_row));
    
-   reg [3:0] 		bcd_count_0;
-   reg [3:0]		bcd_count_1;
-   reg [3:0]		bcd_count_2;
-   reg [3:0]		bcd_count_3;
-   reg [3:0]		bcd_count_4;
-   reg [3:0]		bcd_count_5;
-   reg [3:0]		bcd_count_6;
-   reg [3:0]		bcd_count_7;
-   reg [3:0]		bcd_count_8;
-
-   reg [3:0]		sample_3;
-   reg [3:0]		sample_4;
-   reg [3:0]		sample_5;
-   reg [3:0]		sample_6;
-   reg [3:0]		sample_7;
-   reg [3:0]		sample_8;
+   wire [3:0]		sample_3;
+   wire [3:0]		sample_4;
+   wire [3:0]		sample_5;
+   wire [3:0]		sample_6;
+   wire [3:0]		sample_7;
+   wire [3:0]		sample_8;
    
    reg [31:0] 	count;
    
@@ -210,94 +207,17 @@ module kc705_loopback
       display_col <= count[3:0];
    end
 
-//   assign debug = {bcd_count_1, bcd_count_0};
-   
-   always @(posedge clk) begin
-      if (fx3_logic_rst) begin
-	 bcd_count_0 <= 0;
-	 bcd_count_1 <= 0;
-	 bcd_count_2 <= 0;
-	 bcd_count_3 <= 0;
-	 bcd_count_4 <= 0;
-	 bcd_count_5 <= 0;
-	 bcd_count_6 <= 0;
-	 bcd_count_7 <= 0;
-	 bcd_count_8 <= 0;
-	 led7 <= 0;
-      end else begin // if (fx3_logic_rst)
-	 if (count == FREQ) begin
-	    // Sample
-	    sample_3 <= bcd_count_3;
-	    sample_4 <= bcd_count_4;
-	    sample_5 <= bcd_count_5;
-	    sample_6 <= bcd_count_6;
-	    sample_7 <= bcd_count_7;
-	    sample_8 <= bcd_count_8;
-
-	    bcd_count_0 <= (loop_valid && loop_ready) << 1;
-	    bcd_count_1 <= 0;
-	    bcd_count_2 <= 0;
-	    bcd_count_3 <= 0;
-	    bcd_count_4 <= 0;
-	    bcd_count_5 <= 0;
-	    bcd_count_6 <= 0;
-	    bcd_count_7 <= 0;
-	    bcd_count_8 <= 0;
-	    led7 <= 0;
-	 end else begin
-	   if (~(loop_valid && loop_ready)) begin
-	      led7 <= 0;
-	   end else begin
-	      led7 <= 1;
-	      if (bcd_count_0 != 8 ) begin
-		 bcd_count_0 <= bcd_count_0 + 2;
-	      end else begin
-		 bcd_count_0 <= 0;
-		 if (bcd_count_1 != 9 ) begin
-		    bcd_count_1 <= bcd_count_1 + 1;
-		 end else begin
-		    bcd_count_1 <= 0;
-		    if (bcd_count_2 != 9 ) begin
-		       bcd_count_2 <= bcd_count_2 + 1;
-		    end else begin
-		       bcd_count_2 <= 0;
-		       if (bcd_count_3 != 9 ) begin
-			  bcd_count_3 <= bcd_count_3 + 1;
-		       end else begin
-			  bcd_count_3 <= 0;
-			  if (bcd_count_4 != 9 ) begin
-			     bcd_count_4 <= bcd_count_4 + 1;
-			  end else begin
-			     bcd_count_4 <= 0;
-			     if (bcd_count_5 != 9 ) begin
-				bcd_count_5 <= bcd_count_5 + 1;
-			     end else begin
-				bcd_count_5 <= 0;
-				if (bcd_count_6 != 9 ) begin
-				   bcd_count_6 <= bcd_count_6 + 1;
-				end else begin
-				   bcd_count_6 <= 0;
-				   if (bcd_count_7 != 9 ) begin
-				      bcd_count_7 <= bcd_count_7 + 1;
-				   end else begin
-				      bcd_count_7 <= 0;
-				      if (bcd_count_8 != 9 ) begin
-					 bcd_count_8 <= bcd_count_8 + 1;
-				      end else begin
-					 bcd_count_8 <= 0;
-				      end
-				   end
-				end
-			     end
-			  end
-		       end
-		    end
-		 end
-	      end
-	   end // if (loop_valid && loop_ready)
-	 end // else: !if(count == HZ)
-      end
-   end
+   measure_count
+     #(.STEP((WIDTH == 16) ? 2 : 4))
+     u_count(.clk(clk),
+	     .rst(fx3_logic_rst | (count == FREQ)),
+	     .valid(loop_valid && loop_ready),
+	     .sample_3(sample_3),
+	     .sample_4(sample_4),
+	     .sample_5(sample_5),
+	     .sample_6(sample_6),
+	     .sample_7(sample_7),
+	     .sample_8(sample_8));
    
 endmodule
 

@@ -9,7 +9,7 @@ module kc705_loopback_clock
    );
 
    parameter FREQ = 32'hx;
-   localparam DIVISOR_GHZ = (32'd1000000000 * 1.0) / FREQ;
+   localparam real DIVISOR_GHZ = (32'd1000000000 * 1.0) / FREQ;
    
    wire   clk_in;
    

@@ -26,46 +26,49 @@
  *   Stefan Wallentowitz <stefan.wallentowitz@tum.de>
  */
 module glip_cypressfx3_toplevel
+  #(
+    parameter WIDTH = 16
+    )
   (
    // Cypress FX3 ports
-   input        fx3_pclk,
-   inout [15:0] fx3_dq,
-   output       fx3_slcs_n,
-   output       fx3_sloe_n,
-   output       fx3_slrd_n,
-   output       fx3_slwr_n,
-   output       fx3_pktend_n,
-   output [1:0] fx3_a,
-   input        fx3_flaga,
-   input        fx3_flagb,
-   input        fx3_flagc,
-   input        fx3_flagd,
-   input        fx3_com_rst,
-   input        fx3_logic_rst,
+   input 	      fx3_pclk,
+   inout [WIDTH-1:0]  fx3_dq,
+   output 	      fx3_slcs_n,
+   output 	      fx3_sloe_n,
+   output 	      fx3_slrd_n,
+   output 	      fx3_slwr_n,
+   output 	      fx3_pktend_n,
+   output [1:0]       fx3_a,
+   input 	      fx3_flaga,
+   input 	      fx3_flagb,
+   input 	      fx3_flagc,
+   input 	      fx3_flagd,
+   input 	      fx3_com_rst,
+   input 	      fx3_logic_rst,
 
    // Clock/Reset
-   input         clk,
-   input         rst,
-   output        com_rst,
+   input 	      clk,
+   input 	      rst,
+   output 	      com_rst,
 
    // GLIP FIFO Interface
-   input         fifo_out_valid,
-   output        fifo_out_ready,
-   input [15:0]  fifo_out_data,
-   output        fifo_in_valid,
-   input         fifo_in_ready,
-   output [15:0] fifo_in_data,
+   input 	      fifo_out_valid,
+   output 	      fifo_out_ready,
+   input [WIDTH-1:0]  fifo_out_data,
+   output 	      fifo_in_valid,
+   input 	      fifo_in_ready,
+   output [WIDTH-1:0] fifo_in_data,
 
    // GLIP Control Interface
-   output        ctrl_logic_rst,
+   output 	      ctrl_logic_rst,
 
-   input [2:0] debug_in,
-   output [5:0] debug_out
+   input [2:0] 	      debug_in,
+   output [7:0]       debug_out
    );
 
    localparam FORCE_SEND_TIMEOUT = 10000;
-   parameter FX3_FIFO_IN = 2'b11;
-   parameter FX3_FIFO_OUT = 2'b00;
+   localparam FX3_FIFO_IN  = 2'b11;
+   localparam FX3_FIFO_OUT = 2'b00;
 
    assign ctrl_logic_rst = fx3_logic_rst;
 
@@ -73,13 +76,13 @@ module glip_cypressfx3_toplevel
    assign int_rst = fx3_com_rst | rst;
    assign com_rst = int_rst;
 
-   wire          int_fifo_out_valid;
-   wire [15:0]   int_fifo_out_data;
-   reg           int_fifo_out_ready;
-
-   reg           int_fifo_in_valid;
-   wire [15:0]   int_fifo_in_data;
-   wire          int_fifo_in_ready;
+   wire [WIDTH-1:0]   int_fifo_out_data;
+   wire 	      int_fifo_out_valid;
+   reg 		      int_fifo_out_ready;
+   
+   wire [WIDTH-1:0]   int_fifo_in_data;
+   reg 		      int_fifo_in_valid;
+   wire 	      int_fifo_in_ready;
 
    wire          fx3_epout_fifo_empty;
    wire          fx3_epin_fifo_almost_full;
@@ -120,17 +123,24 @@ module glip_cypressfx3_toplevel
    localparam STATE_READ = 2;
    localparam STATE_WRITE_DELAY = 3;
    localparam STATE_WRITE = 4;
+   localparam STATE_FLUSH = 5;
 
    reg [2:0] state;
    reg [2:0] nxt_state;
 
-   wire   can_write, can_read;
-   assign can_write = 0;
-//   assign can_write = !fx3_epin_fifo_full && int_fifo_out_valid;
+   wire   can_write, can_read, flush;
+   assign can_write = !fx3_epin_fifo_full && int_fifo_out_valid;
    assign can_read = !fx3_epout_fifo_empty && int_fifo_in_ready;
+   assign flush = (idle_counter == 1);
 
-   assign debug_out[0] = fx3_epout_fifo_empty;
-   assign debug_out[1] = int_fifo_in_ready;
+   assign debug_out[0] = clk;
+   assign debug_out[1] = int_fifo_in_valid;
+   assign debug_out[2] = int_fifo_in_ready;
+   assign debug_out[3] = fifo_in_valid;
+   assign debug_out[4] = fifo_in_ready;
+   assign debug_out[5] = int_fifo_out_valid;
+   assign debug_out[6] = int_fifo_out_ready;
+   assign debug_out[7] = pktend;
 
    always @(posedge fx3_pclk) begin
       if (int_rst) begin
@@ -147,7 +157,11 @@ module glip_cypressfx3_toplevel
    always @(*) begin
       nxt_state = state;
       nxt_cycle_counter = cycle_counter + 1;
-      nxt_idle_counter = idle_counter + 1;
+      if (idle_counter > 0) begin
+	 nxt_idle_counter = idle_counter - 1;
+      end else begin
+	 nxt_idle_counter = 0;
+      end
       
       wr = 0;
       rd = 0;
@@ -160,12 +174,15 @@ module glip_cypressfx3_toplevel
       case (state)
 	STATE_IDLE: begin
 	   if (can_write) begin
-	      wr = 1;
 	      fifoadr = FX3_FIFO_OUT;
 	      nxt_state = STATE_WRITE;
 	      nxt_cycle_counter = 0;
+	      nxt_idle_counter = 0;
+	   end else if (flush) begin
+	      fifoadr = FX3_FIFO_OUT;
+	      pktend = 1;
 	   end else if (can_read) begin
-	      rd = 1;
+//	      rd = 1;
 	      fifoadr = FX3_FIFO_IN;
 	      nxt_state = STATE_READ_DELAY;
 	      nxt_cycle_counter = 0;
@@ -174,15 +191,15 @@ module glip_cypressfx3_toplevel
 	STATE_READ_DELAY: begin
 	   rd = 1;
 	   fifoadr = FX3_FIFO_IN;
-	   if (cycle_counter == 1) begin
+	   if (cycle_counter == 2) begin
 	      nxt_state = STATE_READ;
 	   end
 	end
 	STATE_READ: begin
 	   if (can_read) begin
-	      rd = 1;
 	      fifoadr = FX3_FIFO_IN;
 	      int_fifo_in_valid = 1;
+	      rd = 1;
 	   end else begin
 	      nxt_state = STATE_IDLE;
 	   end
@@ -193,6 +210,7 @@ module glip_cypressfx3_toplevel
 	      fifoadr = FX3_FIFO_OUT;
 	      int_fifo_out_ready = 1;
 	   end else begin
+	      nxt_idle_counter = FORCE_SEND_TIMEOUT;
 	      nxt_state = STATE_IDLE;
 	   end
 	end
@@ -207,7 +225,7 @@ module glip_cypressfx3_toplevel
    assign int_fifo_out_valid = ~out_empty;
 
    cdc_fifo
-      #(.DW(16), .ADDRSIZE(13))
+      #(.DW(WIDTH),.ADDRSIZE(4))
       out_fifo_cdc(// Logic side (write input)
                    .wr_full(out_full),
                    .wr_clk(clk),
@@ -229,7 +247,7 @@ module glip_cypressfx3_toplevel
    assign fifo_in_valid = ~in_empty;
 
    cdc_fifo
-      #(.DW(16), .ADDRSIZE(13))
+      #(.DW(WIDTH),.ADDRSIZE(4))
       in_fifo_cdc(// FX3 side (write input)
                   .wr_full(in_full),
                   .wr_clk(fx3_pclk),

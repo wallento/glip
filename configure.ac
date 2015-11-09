@@ -98,6 +98,32 @@ AS_IF([test "x$enable_cypressfx2" = "xyes"], [
     AC_SUBST([libusb_LIBS])
 ])
 
+AC_ARG_ENABLE([cypressfx3],
+    AS_HELP_STRING([--enable-cypressfx2], [enable Cypress FX2 USB backend @<:@default=disabled@:>@]),
+    [],
+    [enable_cypressfx3=no])
+AM_CONDITIONAL([BACKEND_CYPRESSFX3], [test "x$enable_cypressfx3" = "xyes"])
+
+GLIP_CONFIG_BACKEND(cypressfx3, CYPRESSFX3)
+
+AS_IF([test "x$enable_cypressfx3" = "xyes"], [
+    # check for libusb 1.0
+    #
+    # The libusb function libusb_error_string() was introduced with libusb 1.0.9.
+    # To enable compilation with older libusb versions, we can use a fallback
+    # implementation if libusb is too old.
+    # XXX: Replace with a proper feature test instead of testing for the version
+    #      number.
+    PKG_CHECK_MODULES([libusb], [libusb-1.0 > 1.0.8],
+    [
+        AC_DEFINE(LIBUSB_HAS_ERROR_STRING, [1], [Define to 1 if libusb has libusb_error_string() function.])
+    ],
+    [
+        PKG_CHECK_MODULES([libusb], [libusb-1.0 > 1.0.0])
+    ])
+    AC_SUBST([libusb_CFLAGS])
+    AC_SUBST([libusb_LIBS])
+])
 
 AC_ARG_ENABLE([tcp],
     AS_HELP_STRING([--enable-tcp], [enable TCP backend @<:@default=disabled@:>@]),

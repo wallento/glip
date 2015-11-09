@@ -29,54 +29,57 @@
 // TODO:
 //  - rst & board not connected
 //  - downscale when WIDTH == 32
-//  - make Xilinx FIFO selectable
 module kc705_loopback
   #(
     parameter WIDTH = 16
     )
   (
    // FX3 interface
-   output 	fx3_pclk,
+   output 	     fx3_pclk,
    inout [WIDTH-1:0] fx3_dq,
-   output 	fx3_slcs_n,
-   output 	fx3_sloe_n,
-   output 	fx3_slrd_n,
-   output 	fx3_slwr_n,
-   output 	fx3_pktend_n,
-   output [1:0] fx3_a,
-   input 	fx3_flaga,
-   input 	fx3_flagb,
-   input 	fx3_flagc,
-   input 	fx3_flagd,
-   input 	fx3_rst,
-   input 	fx3_com_rst,
-   input 	fx3_logic_rst,
+   output 	     fx3_slcs_n,
+   output 	     fx3_sloe_n,
+   output 	     fx3_slrd_n,
+   output 	     fx3_slwr_n,
+   output 	     fx3_pktend_n,
+   output [1:0]      fx3_a,
+   input 	     fx3_flaga,
+   input 	     fx3_flagb,
+   input 	     fx3_flagc,
+   input 	     fx3_flagd,
+   input 	     fx3_rst,
+   input 	     fx3_com_rst,
+   input 	     fx3_logic_rst,
+
+//   output [2:0]      fx3_pmode,
 
    // User logic
-   input 	clk_n,
-   input 	clk_p, 
+   input 	     clk_n,
+   input 	     clk_p, 
    
-   output 	lcd_en,
-   output 	lcd_rs,
-   output 	lcd_rw,
-   output [3:0] lcd_data,
-   output 	led0,
-   output reg 	led1,
-   output 	led2,
-   output 	led3,
-   output 	led4,
-   output 	led5,
-   output 	led6,
-   output reg 	led7,
-   input 	dip0,
-   input 	dip1,
-   input 	dip2,
-   output [7:0] debug
+   output 	     lcd_en,
+   output 	     lcd_rs,
+   output 	     lcd_rw,
+   output [3:0]      lcd_data,
+   output 	     led0,
+   output reg 	     led1,
+   output 	     led2,
+   output 	     led3,
+   output 	     led4,
+   output 	     led5,
+   output 	     led6,
+   output reg 	     led7,
+   input 	     dip0,
+   input 	     dip1,
+   input 	     dip2,
+   output [7:0]      debug
    );
 
    wire 	clk;
 
-   localparam FREQ = 32'd100000000;
+//   localparam FREQ = 32'd100000000;
+//   localparam FREQ = 32'd50000000;
+   localparam FREQ = 32'd8000000;
    
    kc705_loopback_clock
      #(.FREQ(FREQ))
@@ -128,6 +131,7 @@ module kc705_loopback
 		     .fx3_flagd	(fx3_flagd),
 		     .fx3_com_rst	(fx3_com_rst),
 		     .fx3_logic_rst	(fx3_logic_rst),
+//		     .fx3_pmode (fx3_pmode),
 		     .clk		(clk));
 
    reg [7:0] 		display_data;

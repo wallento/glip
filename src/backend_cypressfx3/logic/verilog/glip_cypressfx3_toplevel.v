@@ -27,7 +27,8 @@
  */
 module glip_cypressfx3_toplevel
   #(
-    parameter WIDTH = 16
+    parameter WIDTH = 16,
+    parameter XILINX_TARGET_DEVICE = "7SERIES"
     )
   (
    // Cypress FX3 ports
@@ -45,6 +46,7 @@ module glip_cypressfx3_toplevel
    input 	      fx3_flagd,
    input 	      fx3_com_rst,
    input 	      fx3_logic_rst,
+//   output [2:0]       fx3_pmode, 
 
    // Clock/Reset
    input 	      clk,
@@ -61,14 +63,14 @@ module glip_cypressfx3_toplevel
 
    // GLIP Control Interface
    output 	      ctrl_logic_rst,
-
+   
    input [2:0] 	      debug_in,
    output [7:0]       debug_out
    );
 
    localparam FORCE_SEND_TIMEOUT = 10000;
-   localparam FX3_FIFO_IN  = 2'b11;
-   localparam FX3_FIFO_OUT = 2'b00;
+   localparam FX3_EPOUT  = 2'b11;
+   localparam FX3_EPIN = 2'b00;
 
    assign ctrl_logic_rst = fx3_logic_rst;
 
@@ -76,37 +78,51 @@ module glip_cypressfx3_toplevel
    assign int_rst = fx3_com_rst | rst;
    assign com_rst = int_rst;
 
-   wire [WIDTH-1:0]   int_fifo_out_data;
-   wire 	      int_fifo_out_valid;
-   reg 		      int_fifo_out_ready;
+   // Interface to the FIFOs from USB side
+   wire int_fifo_in_full;
+   wire int_fifo_in_almost_full;
+   wire int_fifo_in_empty;
+   reg 	int_fifo_in_valid;
+   reg 	int_fifo_out_ready;
    
-   wire [WIDTH-1:0]   int_fifo_in_data;
-   reg 		      int_fifo_in_valid;
-   wire 	      int_fifo_in_ready;
-
-   wire          fx3_epout_fifo_empty;
-   wire          fx3_epin_fifo_almost_full;
-   wire          fx3_epin_fifo_full;
-
-   assign fx3_slcs_n = 1'b0;
-   
-   assign fx3_epout_fifo_empty = !fx3_flagc;
-   assign fx3_epin_fifo_full = !fx3_flaga;
-   assign fx3_epin_fifo_almost_full = !fx3_flagb;
+   wire          fx3_out_empty;
+   wire          fx3_in_almost_full;
+   wire          fx3_in_full;
 
    wire [15:0]   fx3_dq_in;
    wire [15:0]   fx3_dq_out;
    assign fx3_dq_in = fx3_dq;
    assign fx3_dq = (~fx3_slwr_n ? fx3_dq_out : 16'hz);
+   
+   assign fx3_slcs_n = 1'b0;
 
-   assign fx3_dq_out = int_fifo_out_data;
-   assign int_fifo_in_data = fx3_dq_in;
+   reg [WIDTH-1:0] fx3_dq_in_reg;
+   reg 		   fx3_flaga_reg;
+   reg 		   fx3_flagb_reg;
+   reg 		   fx3_flagc_reg;
+   reg 		   fx3_flagd_reg;
 
+   always @(posedge fx3_pclk) begin
+      fx3_dq_in_reg <= fx3_dq_in;
+      fx3_flaga_reg <= fx3_flaga;
+      fx3_flagb_reg <= fx3_flagb;
+      fx3_flagc_reg <= fx3_flagc;
+      fx3_flagd_reg <= fx3_flagd;
+   end
+   
+   assign fx3_out_empty = !fx3_flagc_reg;
+   assign fx3_out_almost_empty = !fx3_flagd_reg;
+   assign fx3_in_full = !fx3_flaga_reg;
+   assign fx3_in_almost_full = !fx3_flagb_reg;
+
+//   assign fx3_pmode = 3'b010;
+   
    reg           wr;
+   reg 		 oe;
    reg           rd;
    reg [1:0]     fifoadr;
    reg           pktend;
-   assign fx3_sloe_n = ~rd;
+   assign fx3_sloe_n = ~oe;
    assign fx3_slwr_n = ~wr;
    assign fx3_slrd_n = ~rd;
    assign fx3_a = fifoadr;
@@ -119,41 +135,40 @@ module glip_cypressfx3_toplevel
    reg [1:0]  nxt_cycle_counter;
 
    localparam STATE_IDLE = 0;
-   localparam STATE_READ_DELAY = 1;
-   localparam STATE_READ = 2;
-   localparam STATE_WRITE_DELAY = 3;
-   localparam STATE_WRITE = 4;
-   localparam STATE_FLUSH = 5;
+   localparam STATE_WRITE = 1;
+   localparam STATE_READ_DELAY = 2;
+   localparam STATE_READ = 3;
+   localparam STATE_READ_DRAIN = 4;
 
    reg [2:0] state;
    reg [2:0] nxt_state;
 
-   wire   can_write, can_read, flush;
-   assign can_write = !fx3_epin_fifo_full && int_fifo_out_valid;
-   assign can_read = !fx3_epout_fifo_empty && int_fifo_in_ready;
-   assign flush = (idle_counter == 1);
-
-   assign debug_out[0] = clk;
-   assign debug_out[1] = int_fifo_in_valid;
-   assign debug_out[2] = int_fifo_in_ready;
-   assign debug_out[3] = fifo_in_valid;
-   assign debug_out[4] = fifo_in_ready;
-   assign debug_out[5] = int_fifo_out_valid;
-   assign debug_out[6] = int_fifo_out_ready;
-   assign debug_out[7] = pktend;
+   reg   flush;
+   reg 	 nxt_flush;
 
    always @(posedge fx3_pclk) begin
       if (int_rst) begin
          state <= STATE_IDLE;
          idle_counter <= 0;
 	 cycle_counter <= 0;
+	 flush <= 1;
       end else begin
          state <= nxt_state;
          idle_counter <= nxt_idle_counter;
 	 cycle_counter <= nxt_cycle_counter;
+	 flush <= nxt_flush;
       end
    end
-
+   
+   assign debug_out[0] = fx3_in_almost_full;
+   assign debug_out[1] = int_fifo_out_empty;
+   assign debug_out[2] = fx3_out_empty;
+   assign debug_out[3] = int_fifo_in_almost_full;
+   assign debug_out[4] = fifo_in_valid;
+   assign debug_out[5] = state[0];
+   assign debug_out[6] = state[1];
+   assign debug_out[7] = state[2];
+   
    always @(*) begin
       nxt_state = state;
       nxt_cycle_counter = cycle_counter + 1;
@@ -162,9 +177,17 @@ module glip_cypressfx3_toplevel
       end else begin
 	 nxt_idle_counter = 0;
       end
+
+      if (!flush && (idle_counter == 1)) begin
+	 nxt_flush = 1;
+      end else begin
+	 nxt_flush = flush;
+      end
       
       wr = 0;
       rd = 0;
+      oe = 0;
+      
       pktend = 0;
       fifoadr = 2'bxx;
 
@@ -173,94 +196,143 @@ module glip_cypressfx3_toplevel
 
       case (state)
 	STATE_IDLE: begin
-	   if (can_write) begin
-	      fifoadr = FX3_FIFO_OUT;
+	   if (!fx3_in_almost_full && !int_fifo_out_empty) begin
+	      fifoadr = FX3_EPIN;
 	      nxt_state = STATE_WRITE;
-	      nxt_cycle_counter = 0;
-	      nxt_idle_counter = 0;
 	   end else if (flush) begin
-	      fifoadr = FX3_FIFO_OUT;
+	      fifoadr = FX3_EPIN;
 	      pktend = 1;
-	   end else if (can_read) begin
-//	      rd = 1;
-	      fifoadr = FX3_FIFO_IN;
+	      nxt_flush = 0;
+	   end else if (!fx3_out_empty && !int_fifo_in_almost_full) begin
+
+	      // We can read from FX3 if data is available and we can
+	      // receive receive data. We have to use th almost full
+	      // signal as we need to be capable of reading 3 words (1
+	      // delay of latching, 2 delay of interface, see fig 12)
+	      fifoadr = FX3_EPOUT;
 	      nxt_state = STATE_READ_DELAY;
 	      nxt_cycle_counter = 0;
+	      rd = 1;
+	      oe = 1;
 	   end
 	end	
 	STATE_READ_DELAY: begin
+	   // Wait two cycles before forwarding data to the FIFO
 	   rd = 1;
-	   fifoadr = FX3_FIFO_IN;
+	   oe = 1;
+	   fifoadr = FX3_EPOUT;
 	   if (cycle_counter == 2) begin
 	      nxt_state = STATE_READ;
 	   end
 	end
 	STATE_READ: begin
-	   if (can_read) begin
-	      fifoadr = FX3_FIFO_IN;
+	   fifoadr = FX3_EPOUT;
+	   if (fx3_out_empty) begin
+	      // No more data from FX3
+	      nxt_state = STATE_IDLE;
+	   end else begin
 	      int_fifo_in_valid = 1;
 	      rd = 1;
-	   end else begin
+	      oe = 1;
+	      if (int_fifo_in_almost_full) begin
+		 // We need to back-pressure and drain
+		 nxt_state = STATE_READ_DRAIN;
+		 nxt_cycle_counter = 0;
+	      end
+	   end
+	end
+	STATE_READ_DRAIN: begin
+	   fifoadr = FX3_EPOUT;
+	   if (fx3_out_empty) begin
+	      // No more data from FX3
 	      nxt_state = STATE_IDLE;
+	   end else begin
+	      fifoadr = FX3_EPOUT;
+	      int_fifo_in_valid = 1;
+	      if (cycle_counter == 1) begin
+		 nxt_state = STATE_IDLE;
+	      end
 	   end
 	end
 	STATE_WRITE: begin
-	   if (can_write) begin
-	      wr = 1;
-	      fifoadr = FX3_FIFO_OUT;
-	      int_fifo_out_ready = 1;
-	   end else begin
+	   if (int_fifo_out_empty) begin
 	      nxt_idle_counter = FORCE_SEND_TIMEOUT;
 	      nxt_state = STATE_IDLE;
+	   end else if (fx3_in_almost_full) begin
+	      nxt_idle_counter = FORCE_SEND_TIMEOUT;
+	      nxt_state = STATE_IDLE;
+	      pktend = 1;
+	   end else begin
+	      wr = 1;
+	      fifoadr = FX3_EPIN;
+	      int_fifo_out_ready = 1;
 	   end
+	end // case: STATE_WRITE
+	default: begin
+	   nxt_state = state;
 	end
       endcase
    end
    
-
-   // Clock domain crossing logic -> FX3
-   wire out_full;
-   wire out_empty;
-   assign fifo_out_ready = ~out_full;
-   assign int_fifo_out_valid = ~out_empty;
-
-   cdc_fifo
-      #(.DW(WIDTH),.ADDRSIZE(4))
-      out_fifo_cdc(// Logic side (write input)
-                   .wr_full(out_full),
-                   .wr_clk(clk),
-                   .wr_en(fifo_out_valid),
-                   .wr_data(fifo_out_data),
-                   .wr_rst(~int_rst),
-
-                   // FX3 side (read output)
-                   .rd_empty(out_empty),
-                   .rd_data(int_fifo_out_data),
-                   .rd_clk(fx3_pclk),
-                   .rd_rst(~int_rst),
-                   .rd_en(int_fifo_out_ready));
-
+   assign fifo_in_valid = !int_fifo_in_empty;
+   
    // Clock domain crossing FX3 -> logic
-   wire in_full;
-   wire in_empty;
-   assign int_fifo_in_ready = ~in_full;
-   assign fifo_in_valid = ~in_empty;
+   FIFO_DUALCLOCK_MACRO
+     #(.ALMOST_FULL_OFFSET(9'h006), // Sets almost full threshold
+       .ALMOST_EMPTY_OFFSET(9'h006),
+       .DATA_WIDTH(WIDTH), // Valid values are 1-72 (37-72 only valid when FIFO_SIZE="36Kb")
+       .DEVICE(XILINX_TARGET_DEVICE), // Target device: "VIRTEX5", "VIRTEX6", "7SERIES"
+       .FIFO_SIZE("18Kb"), // Target BRAM: "18Kb" or "36Kb"
+       .FIRST_WORD_FALL_THROUGH("TRUE") // Sets the FIfor FWFT to "TRUE" or "FALSE"
+       )
+   in_fifo
+     (.ALMOSTEMPTY (),
+      .ALMOSTFULL  (int_fifo_in_almost_full),
+      .DO          (fifo_in_data),
+      .EMPTY       (int_fifo_in_empty),
+      .FULL        (int_fifo_in_full),
+      .RDCOUNT     (),
+      .RDERR       (),
+      .WRCOUNT     (),
+      .WRERR       (),
+      .DI          (fx3_dq_in_reg),
+      .RDCLK       (clk),
+      .RDEN        (fifo_in_ready & !int_fifo_in_empty),
+      .RST         (int_rst),
+      .WRCLK       (fx3_pclk),
+      .WREN        (int_fifo_in_valid)
+      );
 
-   cdc_fifo
-      #(.DW(WIDTH),.ADDRSIZE(4))
-      in_fifo_cdc(// FX3 side (write input)
-                  .wr_full(in_full),
-                  .wr_clk(fx3_pclk),
-                  .wr_en(int_fifo_in_valid),
-                  .wr_data(int_fifo_in_data),
-                  .wr_rst(~int_rst),
 
-                  // Logic side (read output)
-                  .rd_empty(in_empty),
-                  .rd_data(fifo_in_data),
-                  .rd_clk(clk),
-                  .rd_rst(~int_rst),
-                  .rd_en(fifo_in_ready));
+   assign fifo_out_ready = !int_fifo_out_full;
+   // Clock domain crossing logic -> FX3 
+   FIFO_DUALCLOCK_MACRO
+     #(.ALMOST_EMPTY_OFFSET(9'h006), // Sets the almost empty threshold
+       .ALMOST_FULL_OFFSET(9'h006),
+       .DATA_WIDTH(WIDTH), // Valid values are 1-72 (37-72 only valid when FIFO_SIZE="36Kb")
+       .DEVICE(XILINX_TARGET_DEVICE), // Target device: "VIRTEX5", "VIRTEX6", "7SERIES"
+       .FIFO_SIZE("18Kb"), // Target BRAM: "18Kb" or "36Kb"
+       .FIRST_WORD_FALL_THROUGH("TRUE") // Sets the FIfor FWFT to "TRUE" or "FALSE"
+       )
+   out_fifo
+     (.ALMOSTEMPTY (int_fifo_out_almost_empty),
+      .ALMOSTFULL  (),
+      .DO          (fx3_dq_out),
+      .EMPTY       (int_fifo_out_empty),
+      .FULL        (int_fifo_out_full),
+      .RDCOUNT     (),
+      .RDERR       (),
+      .WRCOUNT     (),
+      .WRERR       (),
+      .DI          (fifo_out_data),
+      .RDCLK       (fx3_pclk),
+      .RDEN        (int_fifo_out_ready & !int_fifo_out_empty),
+      .RST         (int_rst),
+      .WRCLK       (clk),
+      .WREN        (fifo_out_valid)
+      );
+
+
 
 endmodule
 

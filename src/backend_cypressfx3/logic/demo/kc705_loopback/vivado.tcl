@@ -18,8 +18,6 @@ set_property "board_part" "xilinx.com:kc705:part0:1.2" $obj
 set_property "default_lib" "xil_defaultlib" $obj
 set_property "simulator_language" "Mixed" $obj
 
-
-
 # Create 'sources_1' fileset (if not found)
 if {[string equal [get_filesets -quiet sources_1] ""]} {
   create_fileset -srcset sources_1
@@ -45,6 +43,7 @@ add_files -norecurse -fileset $obj $files
 # Set 'sources_1' fileset properties
 set obj [get_filesets sources_1]
 set_property "generic" "WIDTH=16" $obj
+set_property "top" "kc705_loopback" $obj
 
 # Create 'constrs_1' fileset (if not found)
 if {[string equal [get_filesets -quiet constrs_1] ""]} {
@@ -85,42 +84,15 @@ set obj [get_filesets sim_1]
 # Set 'sim_1' fileset properties
 set obj [get_filesets sim_1]
 set_property "runtime" "" $obj
-set_property "xelab.debug_level" "" $obj
-set_property "xelab.load_glbl" "" $obj
-set_property "xelab.mt_level" "" $obj
+set_property "top" "kc705_loopback" $obj
 set_property "xelab.nosort" "1" $obj
-set_property "xelab.rangecheck" "" $obj
-set_property "xelab.relax" "" $obj
-set_property "xelab.sdf_delay" "" $obj
+set_property "xelab.rangecheck" "1" $obj
 set_property "xelab.unifast" "" $obj
+set_property "xsim.elaborate.rangecheck" "1" $obj
+set_property "xsim.simulate.runtime" "" $obj
 
-# Create 'synth_2' run (if not found)
-if {[string equal [get_runs -quiet synth_2] ""]} {
-  create_run -name synth_2 -part xc7k325tffg900-2 -flow {Vivado Synthesis 2015} -strategy "Vivado Synthesis Defaults" -constrset constrs_1
-} else {
-  set_property strategy "Vivado Synthesis Defaults" [get_runs synth_2]
-  set_property flow "Vivado Synthesis 2015" [get_runs synth_2]
-}
-set obj [get_runs synth_2]
-set_property "needs_refresh" "1" $obj
+# Do not flatten design
+set obj [get_runs synth_1]
 set_property "steps.synth_design.args.flatten_hierarchy" "none" $obj
-
-# set the current synth run
-current_run -synthesis [get_runs synth_2]
-
-# Create 'impl_2' run (if not found)
-if {[string equal [get_runs -quiet impl_2] ""]} {
-  create_run -name impl_2 -part xc7k325tffg900-2 -flow {Vivado Implementation 2015} -strategy "Vivado Implementation Defaults" -constrset constrs_1 -parent_run synth_2
-} else {
-  set_property strategy "Vivado Implementation Defaults" [get_runs impl_2]
-  set_property flow "Vivado Implementation 2015" [get_runs impl_2]
-}
-set obj [get_runs impl_2]
-set_property "needs_refresh" "1" $obj
-set_property "steps.write_bitstream.args.readback_file" "0" $obj
-set_property "steps.write_bitstream.args.verbose" "0" $obj
-
-# set the current impl run
-current_run -implementation [get_runs impl_2]
 
 puts "INFO: Project created:kc705_loopback"

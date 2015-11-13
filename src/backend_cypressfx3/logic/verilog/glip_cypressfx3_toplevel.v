@@ -89,8 +89,8 @@ module glip_cypressfx3_toplevel
    wire          fx3_in_almost_full;
    wire          fx3_in_full;
 
-   wire [15:0]   fx3_dq_in;
-   wire [15:0]   fx3_dq_out;
+   wire [WIDTH-1:0]   fx3_dq_in;
+   wire [WIDTH-1:0]   fx3_dq_out;
    assign fx3_dq_in = fx3_dq;
    assign fx3_dq = (~fx3_slwr_n ? fx3_dq_out : 16'hz);
    

@@ -1,11 +1,11 @@
 
-all: vivado-project vivado-32bit-project
+all: vivado-project
 
 vivado-project:
-	vivado -mode batch < vivado.tcl
+	vivado -mode batch -source vivado.tcl
 
 vivado-32bit-project:
-	vivado -mode batch < vivado-32.tcl
+	vivado -mode batch -source vivado_32.tcl
 
 clean: clean-vivado 
 
@@ -17,4 +17,5 @@ clean-vivado:
 	rm -f *.backup.log
 	rm -rf .Xil
 	rm -f ipc_tcp_xilinx_srv.log ipc_tcp_xilinx.log
+	rm -rf kc705_loopback
 

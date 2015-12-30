@@ -12,3 +12,5 @@
 /ipc_tcp_xilinx_srv.log
 /synplify.prj
 /loopback_synplify.prd
+*.jou
+*.log
